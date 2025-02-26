@@ -1,0 +1,1 @@
+"""Database module for storage and retrieval of weather data."""

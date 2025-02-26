@@ -1,0 +1,36 @@
+website:
+  title: "FieldClimate Analytics"
+  site-url: "/fieldclimate/"
+  favicon: "assets/favicon.png"
+  
+colors:
+  primary: "#3498db"    # Main brand color
+  secondary: "#2ecc71"  # Secondary accent color
+  success: "#27ae60"    # Success indicators
+  warning: "#f39c12"    # Warning indicators
+  danger: "#e74c3c"     # Danger/error indicators
+  background: "#f8f9fa" # Background color
+  text: "#333333"       # Main text color
+
+fonts:
+  # Define base fonts
+  base-font: "Lato"
+  heading-font: "Lato" 
+  code-font: "Intel One Mono"
+  
+  # Google font loading
+  google:
+    families:
+      - name: "Lato"
+        styles: [300, 400, 700]
+      - name: "Intel One Mono" 
+        styles: [400, 500]
+  
+navbar:
+  logo: "assets/logo.png"
+  background: "primary"
+  foreground: "white"
+  
+footer:
+  text: "FieldClimate Analytics Dashboard"
+  background: "light"

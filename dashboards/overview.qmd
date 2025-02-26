@@ -1,0 +1,243 @@
+---
+title: "FieldClimate Weather Station Overview"
+format:
+  html:
+    page-layout: full
+    theme: cosmo
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    toc: true
+date: last-modified
+---
+
+```{python}
+#| tags: [parameters]
+#| echo: false
+
+# Dashboard parameters with defaults
+days = 7  # Last N days of data to show
+```
+
+```{python}
+#| echo: false
+
+import os
+import sys
+from datetime import datetime, timedelta
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Add scripts directory to path
+sys.path.append("scripts")
+from dashboard_helpers import (
+    get_all_stations,
+    get_latest_measurements,
+    get_station_details,
+    plot_sensor_data,
+)
+
+# Set options
+pd.set_option("display.max_rows", 100)
+```
+
+## Weather Station Status
+
+This dashboard provides an overview of all weather stations in the system.
+
+```{python}
+#| echo: false
+
+# Get all stations
+stations = get_all_stations()
+
+if stations.empty:
+    print("No weather stations found in the database.")
+else:
+    # Convert last_updated to datetime
+    stations["last_updated"] = pd.to_datetime(stations["last_updated"])
+    
+    # Calculate time since last update
+    now = pd.Timestamp.now(tz="UTC")
+    stations["hours_since_update"] = (now - stations["last_updated"]).dt.total_seconds() / 3600
+    
+    # Determine status based on last update time
+    stations["status"] = "Unknown"
+    stations.loc[stations["hours_since_update"] < 1.5, "status"] = "OK"
+    stations.loc[(stations["hours_since_update"] >= 1.5) & 
+                (stations["hours_since_update"] < 24), "status"] = "Warning"
+    stations.loc[stations["hours_since_update"] >= 24, "status"] = "Alert"
+    stations.loc[stations["last_updated"].isna(), "status"] = "Unknown"
+    
+    # Define status colors
+    status_colors = {
+        "OK": "green",
+        "Warning": "orange",
+        "Alert": "red",
+        "Unknown": "gray"
+    }
+    
+    # Create status table
+    status_table = pd.DataFrame({
+        "Station": stations["name"],
+        "ID": stations["id"],
+        "Last Update": stations["last_updated"].dt.strftime("%Y-%m-%d %H:%M"),
+        "Hours Since Update": stations["hours_since_update"].round(1),
+        "Status": stations["status"],
+        "Enabled": stations["enabled"].map({1: "Yes", 0: "No"})
+    })
+    
+    # Display status table with colored status cells
+    status_html = status_table.style.format({
+        "Hours Since Update": "{:.1f}"
+    }).applymap(
+        lambda x: f"background-color: {status_colors.get(x, 'white')}" if x in status_colors else "",
+        subset=["Status"]
+    ).to_html()
+    
+    from IPython.display import HTML
+    display(HTML(status_html))
+```
+
+## Map of Stations
+
+```{python}
+#| echo: false
+
+if not stations.empty and 'latitude' in stations.columns and 'longitude' in stations.columns:
+    # Filter out stations with missing coordinates
+    map_stations = stations.dropna(subset=["latitude", "longitude"])
+    
+    if not map_stations.empty:
+        # Prepare hover text
+        map_stations["hover_text"] = map_stations.apply(
+            lambda row: f"<b>{row['name']}</b><br>" +
+                       f"ID: {row['id']}<br>" +
+                       f"Last update: {pd.to_datetime(row['last_updated']).strftime('%Y-%m-%d %H:%M')}<br>" +
+                       f"Status: {row['status']}",
+            axis=1
+        )
+        
+        # Create map
+        fig = px.scatter_mapbox(
+            map_stations,
+            lat="latitude",
+            lon="longitude",
+            hover_name="name",
+            hover_data={"latitude": False, "longitude": False, "hover_text": False},
+            custom_data=["id"],
+            color="status",
+            color_discrete_map=status_colors,
+            zoom=5,
+            height=600,
+        )
+        
+        # Update hover template
+        fig.update_traces(
+            hovertemplate="%{customdata[0]}<br>%{hovertext}<extra></extra>",
+            hovertext=map_stations["hover_text"],
+        )
+        
+        # Use OpenStreetMap
+        fig.update_layout(
+            mapbox_style="open-street-map",
+            margin=dict(l=0, r=0, t=0, b=0),
+        )
+        
+        fig.show()
+    else:
+        print("No stations with valid coordinates found.")
+else:
+    print("No stations with coordinate information found.")
+```
+
+## Current Conditions
+
+The following table shows the latest measurements from each station.
+
+```{python}
+#| echo: false
+#| warning: false
+
+if not stations.empty:
+    # Create a list to store DataFrames for each station
+    all_latest_data = []
+    
+    # Process each enabled station
+    for _, station in stations[stations["enabled"] == 1].iterrows():
+        station_id = station["id"]
+        station_name = station["name"]
+        
+        # Get latest measurements
+        latest_data = get_latest_measurements(station_id)
+        
+        if not latest_data.empty:
+            # Add station name
+            latest_data["station_name"] = station_name
+            all_latest_data.append(latest_data)
+    
+    if all_latest_data:
+        # Combine all data
+        combined_data = pd.concat(all_latest_data, ignore_index=True)
+        
+        # Format the table
+        latest_table = combined_data.pivot_table(
+            index=["station_name", "sensor_name", "unit"],
+            columns=[],
+            values=["value", "timestamp"],
+            aggfunc={"value": "last", "timestamp": "last"}
+        ).reset_index()
+        
+        # Flatten the column structure
+        latest_table.columns = ["Station", "Sensor", "Unit", "Value", "Timestamp"]
+        
+        # Format timestamp and value
+        latest_table["Timestamp"] = pd.to_datetime(latest_table["Timestamp"]).dt.strftime("%Y-%m-%d %H:%M")
+        
+        # Create an HTML table with proper formatting
+        html_table = latest_table.to_html(
+            index=False,
+            float_format="%.2f",
+            classes="table table-striped table-hover"
+        )
+        
+        display(HTML(html_table))
+    else:
+        print("No current measurements available.")
+else:
+    print("No stations found.")
+```
+
+## Links to Station Dashboards
+
+Click on a station to view detailed information:
+
+```{python}
+#| echo: false
+
+if not stations.empty:
+    # Create links to station dashboards
+    links = []
+    for _, station in stations.iterrows():
+        station_id = station["id"]
+        station_name = station["name"]
+        status = station["status"]
+        status_color = status_colors.get(status, "black")
+        
+        # Create HTML link with status color
+        link = f'<a href="station.qmd?station_id={station_id}" style="color:{status_color}">{station_name} ({station_id})</a>'
+        links.append(link)
+    
+    # Display as bulleted list
+    html_links = "<ul>\n" + "\n".join([f"<li>{link}</li>" for link in links]) + "\n</ul>"
+    display(HTML(html_links))
+else:
+    print("No stations found.")
+```
+
+---
+
+**Data last refreshed:** `{python} datetime.now().strftime("%Y-%m-%d %H:%M:%S")`

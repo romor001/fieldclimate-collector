@@ -1,0 +1,54 @@
+# FieldClimate Collector Configuration
+
+# API connection settings
+api:
+  # Path to public key file
+  public_key_path: "secrets/public_key.txt"
+  # Path to private key file
+  private_key_path: "secrets/private_key.txt"
+  # FieldClimate API base URL
+  base_url: "https://api.fieldclimate.com/v1"
+  # Request timeout in seconds
+  request_timeout_seconds: 30
+  # Maximum number of retries for failed requests
+  max_retries: 3
+
+# Database settings
+database:
+  # Path to SQLite database file
+  path: "data/fieldclimate.db"
+  # Run VACUUM after collection to optimize database (can be slow)
+  optimize_after_collection: false
+
+# Data collection settings
+collection:
+  # Time between collections in minutes (used by scheduler if enabled)
+  interval_minutes: 60
+  # Number of days to backfill when adding a new station
+  backfill_days: 7
+  # Maximum batch size for database operations
+  batch_size: 100
+
+# Weather stations
+stations:
+  # Station 1
+  - id: "00208E6F"
+    name: "FHSWF Soest"
+    enabled: true
+    # Sensors will be auto-discovered
+
+  # Station 2 (example - commented out)
+  #- id: "STATION_ID_2"
+  #  name: "Station Name 2"
+  #  enabled: true
+
+# Logging configuration
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  # Path to log file (if not specified, logs only to console)
+  file: "logs/fieldclimate.log"
+  # Maximum log file size in bytes before rotation (10 MB)
+  max_size: 10485760
+  # Number of backup log files to keep
+  backup_count: 5

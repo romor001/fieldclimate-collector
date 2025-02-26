@@ -1,0 +1,394 @@
+---
+title: "Weather Station Details"
+format:
+  html:
+    page-layout: full
+    theme: cosmo
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    toc: true
+date: last-modified
+---
+
+```{python}
+#| tags: [parameters]
+#| echo: false
+
+# Dashboard parameters with defaults
+station_id = "00208E6F"  # Default station ID
+days = 7  # Last N days of data to show
+```
+
+```{python}
+#| echo: false
+
+import os
+import sys
+from datetime import datetime, timedelta
+import json
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Add scripts directory to path
+sys.path.append("scripts")
+from dashboard_helpers import (
+    get_station_details,
+    get_station_sensors,
+    get_sensor_data,
+    get_latest_measurements,
+    get_daily_statistics,
+    plot_sensor_data,
+    plot_daily_statistics,
+    create_sensor_type_plots,
+)
+
+# Set options
+pd.set_option("display.max_rows", 100)
+```
+
+```{python}
+#| echo: false
+
+# Get station details
+station = get_station_details(station_id)
+
+if not station:
+    from IPython.display import HTML
+    display(HTML(f"""
+    <div class="alert alert-danger">
+        <h4>Station Not Found</h4>
+        <p>The station with ID "{station_id}" was not found in the database.</p>
+        <p><a href="overview.qmd" class="btn btn-primary">Return to Overview</a></p>
+    </div>
+    """))
+else:
+    # Get station metadata
+    station_name = station["name"]
+    latitude = station.get("latitude")
+    longitude = station.get("longitude")
+    elevation = station.get("elevation")
+    last_updated = pd.to_datetime(station.get("last_updated"))
+    
+    # Calculate time range for data display
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+
+if not station:
+    # Skip the rest of the dashboard if station not found
+    pass
+else:
+    # Print title with station name
+    print(f"# {station_name} ({station_id})\n")
+    
+    # Create station info card
+    card_html = """
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title">Station Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>ID:</th>
+                            <td>{id}</td>
+                        </tr>
+                        <tr>
+                            <th>Name:</th>
+                            <td>{name}</td>
+                        </tr>
+                        <tr>
+                            <th>Coordinates:</th>
+                            <td>{latitude:.6f}, {longitude:.6f}</td>
+                        </tr>
+                        <tr>
+                            <th>Elevation:</th>
+                            <td>{elevation:.1f} m</td>
+                        </tr>
+                        <tr>
+                            <th>Last Updated:</th>
+                            <td>{last_updated}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6" id="station-map">
+                </div>
+            </div>
+        </div>
+    </div>
+    """.format(
+        id=station_id,
+        name=station_name,
+        latitude=latitude if latitude is not None else 0,
+        longitude=longitude if longitude is not None else 0,
+        elevation=elevation if elevation is not None else 0,
+        last_updated=last_updated.strftime("%Y-%m-%d %H:%M:%S") if last_updated is not None else "Unknown"
+    )
+    
+    print(card_html)
+```
+
+```{python}
+#| echo: false
+
+if station and latitude is not None and longitude is not None:
+    # Create a simple map with the station location
+    fig = px.scatter_mapbox(
+        pd.DataFrame({
+            "lat": [latitude], 
+            "lon": [longitude],
+            "name": [station_name]
+        }),
+        lat="lat",
+        lon="lon",
+        hover_name="name",
+        zoom=10,
+        height=300,
+    )
+    
+    # Use OpenStreetMap
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin=dict(l=10, r=10, t=10, b=10),
+    )
+    
+    fig.show()
+```
+
+## Current Conditions
+
+The latest measurements from this weather station.
+
+```{python}
+#| echo: false
+
+if station:
+    # Get latest measurements
+    latest_data = get_latest_measurements(station_id)
+    
+    if latest_data.empty:
+        print("No measurements available for this station.")
+    else:
+        # Format the table
+        latest_table = latest_data[["sensor_name", "type", "unit", "value", "timestamp"]].copy()
+        
+        # Format timestamp
+        latest_table["timestamp"] = pd.to_datetime(latest_table["timestamp"]).dt.strftime("%Y-%m-%d %H:%M")
+        
+        # Rename columns
+        latest_table.columns = ["Sensor", "Type", "Unit", "Value", "Timestamp"]
+        
+        # Display as HTML table
+        from IPython.display import HTML
+        html_table = latest_table.to_html(
+            index=False,
+            float_format="%.2f",
+            classes="table table-striped table-hover"
+        )
+        
+        display(HTML(html_table))
+```
+
+## Time Period Selection
+
+Use the options below to adjust the time period for the charts.
+
+```{python}
+#| echo: false
+
+if station:
+    # Create date range buttons
+    date_ranges = {
+        "1 Day": 1,
+        "7 Days": 7,
+        "30 Days": 30,
+        "90 Days": 90,
+        "1 Year": 365
+    }
+    
+    buttons_html = '<div class="btn-group mb-3" role="group">'
+    for label, d in date_ranges.items():
+        active = ' active' if d == days else ''
+        buttons_html += f'<a href="?station_id={station_id}&days={d}" class="btn btn-outline-primary{active}">{label}</a>'
+    buttons_html += '</div>'
+    
+    from IPython.display import HTML
+    display(HTML(buttons_html))
+    
+    # Show selected date range
+    print(f"Showing data from **{start_date.strftime('%Y-%m-%d')}** to **{end_date.strftime('%Y-%m-%d')}**")
+```
+
+## Temperature Measurements
+
+```{python}
+#| echo: false
+
+if station:
+    # Create temperature plots
+    temp_figures = create_sensor_type_plots(
+        station_id=station_id,
+        sensor_type="temp",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    if not temp_figures:
+        print("No temperature sensors found for this station.")
+    else:
+        for fig in temp_figures:
+            fig.show()
+```
+
+## Humidity Measurements
+
+```{python}
+#| echo: false
+
+if station:
+    # Create humidity plots
+    humidity_figures = create_sensor_type_plots(
+        station_id=station_id,
+        sensor_type="humidity",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    if not humidity_figures:
+        print("No humidity sensors found for this station.")
+    else:
+        for fig in humidity_figures:
+            fig.show()
+```
+
+## Precipitation Measurements
+
+```{python}
+#| echo: false
+
+if station:
+    # Create precipitation plots
+    precip_figures = create_sensor_type_plots(
+        station_id=station_id,
+        sensor_type="rain",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    if not precip_figures:
+        # Try alternative names
+        precip_figures = create_sensor_type_plots(
+            station_id=station_id,
+            sensor_type="precip",
+            start_date=start_date,
+            end_date=end_date
+        )
+    
+    if not precip_figures:
+        print("No precipitation sensors found for this station.")
+    else:
+        for fig in precip_figures:
+            fig.show()
+```
+
+## Wind Measurements
+
+```{python}
+#| echo: false
+
+if station:
+    # Create wind plots
+    wind_figures = create_sensor_type_plots(
+        station_id=station_id,
+        sensor_type="wind",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    if not wind_figures:
+        print("No wind sensors found for this station.")
+    else:
+        for fig in wind_figures:
+            fig.show()
+```
+
+## Other Measurements
+
+```{python}
+#| echo: false
+
+if station:
+    # Get all sensors
+    sensors = get_station_sensors(station_id)
+    
+    # Filter out sensors already displayed
+    displayed_types = ["temp", "humidity", "rain", "precip", "wind"]
+    other_sensors = sensors[~sensors["type"].str.contains("|".join(displayed_types), case=False, na=False)]
+    
+    if other_sensors.empty:
+        print("No other sensors found for this station.")
+    else:
+        # Group by type
+        sensor_types = other_sensors["type"].unique()
+        
+        for sensor_type in sensor_types:
+            print(f"### {sensor_type.title()} Measurements\n")
+            
+            # Create plots for this sensor type
+            type_figures = create_sensor_type_plots(
+                station_id=station_id,
+                sensor_type=sensor_type,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            for fig in type_figures:
+                fig.show()
+```
+
+## Available Sensors
+
+The following sensors are available for this station:
+
+```{python}
+#| echo: false
+
+if station:
+    # Get all sensors
+    sensors = get_station_sensors(station_id)
+    
+    if sensors.empty:
+        print("No sensors found for this station.")
+    else:
+        # Create a table with sensor details
+        sensor_table = sensors[["name", "type", "unit", "position"]].copy()
+        sensor_table.columns = ["Name", "Type", "Unit", "Position"]
+        
+        # Sort by type and name
+        sensor_table = sensor_table.sort_values(["Type", "Name"])
+        
+        # Display as HTML table
+        from IPython.display import HTML
+        html_table = sensor_table.to_html(
+            index=False,
+            classes="table table-striped table-hover"
+        )
+        
+        display(HTML(html_table))
+```
+
+---
+
+**Data last refreshed:** `{python} datetime.now().strftime("%Y-%m-%d %H:%M:%S")`
+
+[Return to Overview](overview.qmd)
