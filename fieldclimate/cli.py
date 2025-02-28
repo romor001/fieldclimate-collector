@@ -105,7 +105,7 @@ def setup_environment(args: argparse.Namespace) -> tuple:
         sys.exit(1)
     
     # Set up logging
-    log_config = config_manager.get("logging", {})
+    log_config = config_manager.get("logging") or {}
     if args.verbose:
         log_config["level"] = "DEBUG"
     logger = setup_logging(log_config)

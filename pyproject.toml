@@ -2,22 +2,22 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
-line-length = 88
-target-version = ["py38"]
-include = '\.pyi?$'
+[project]
+name = "fieldclimate-collector"
+version = "0.1.0"
+description = "Collects weather data from Pessl's FieldClimate platform"
+authors = [
+    {name = "Rolf Morgenstern", email = "morgenstern.rolf@fh-swf.de"},
+]
+requires-python = ">=3.8"
+license = {text = "MIT"}
+dependencies = [
+    "requests>=2.25.0",
+    "pyyaml>=5.1",
+    "sqlite-utils>=3.0",
+    "python-dateutil>=2.8.1",
+    "click>=7.1.2",
+]
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-
-[tool.mypy]
-python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
+[project.scripts]
+fieldclimate-collector = "fieldclimate.cli:main"

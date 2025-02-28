@@ -9,45 +9,6 @@ from typing import Any, Dict, Optional, Union
 import dateutil.parser
 
 
-def generate_signature(
-    method: str, 
-    path: str, 
-    timestamp: int, 
-    private_key: str, 
-    content: str = ""
-) -> str:
-    """Generate HMAC signature for FieldClimate API.
-    
-    Args:
-        method: HTTP method (GET, POST, etc.).
-        path: API endpoint path.
-        timestamp: Current UTC timestamp in seconds.
-        private_key: Private key for signature generation.
-        content: Request body for POST/PUT requests.
-        
-    Returns:
-        HMAC signature as a hexadecimal string.
-    """
-    # Construct the message string
-    message = f"{method}{path}{timestamp}{content}"
-    
-    # Create signature using HMAC-SHA256
-    signature = hmac.new(
-        private_key.encode(),
-        message.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    return signature
-
-
-def utc_timestamp() -> int:
-    """Get current UTC timestamp in seconds.
-    
-    Returns:
-        Current UTC timestamp as an integer.
-    """
-    return int(time.time())
 
 
 def parse_datetime(dt_str: str) -> datetime:

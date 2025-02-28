@@ -7,7 +7,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.auth import AuthBase
 from urllib3.util.retry import Retry
+import hmac
+import hashlib
 
 from fieldclimate.utils.error_handler import (
     APIAuthError,
@@ -20,13 +23,57 @@ from fieldclimate.utils.error_handler import (
 )
 from fieldclimate.utils.helpers import (
     format_datetime,
-    generate_signature,
     parse_datetime,
-    utc_timestamp,
 )
 
 # Set up module logger
 logger = logging.getLogger(__name__)
+
+
+# Class to perform HMAC authentication
+class FieldClimateAuth(AuthBase):
+    """Authentication handler for FieldClimate API requests."""
+    
+    def __init__(self, api_path: str, public_key: str, private_key: str, method: str = 'GET'):
+        """Initialize the authentication handler.
+        
+        Args:
+            api_path: The API endpoint path.
+            public_key: Public API key.
+            private_key: Private API key.
+            method: HTTP method (GET, POST, etc.)
+        """
+        self._api_path = api_path
+        self._public_key = public_key
+        self._private_key = private_key
+        self._method = method.upper()
+    
+    def __call__(self, request):
+        """Add authentication headers to the request.
+        
+        Args:
+            request: The request to authenticate.
+            
+        Returns:
+            The authenticated request.
+        """
+        date_stamp = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+        request.headers['Date'] = date_stamp
+        
+        # Create message for signature
+        msg = (self._method + self._api_path + date_stamp + self._public_key).encode('utf-8')
+        
+        # Generate signature
+        signature = hmac.new(
+            self._private_key.encode('utf-8'),
+            msg,
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Add authorization header
+        request.headers['Authorization'] = f'hmac {self._public_key}:{signature}'
+        
+        return request
 
 
 class FieldClimateClient:
@@ -36,7 +83,7 @@ class FieldClimateClient:
         self,
         public_key: str,
         private_key: str,
-        base_url: str = "https://api.fieldclimate.com/v1",
+        base_url: str = "https://api.fieldclimate.com/v2",
         timeout: int = 30,
         max_retries: int = 3,
         requests_per_hour: int = 7200,  # 90% of limit to be safe
@@ -70,32 +117,6 @@ class FieldClimateClient:
         
         # Rate limiter to control request frequency
         self.rate_limiter = RateLimiter(requests_per_hour=requests_per_hour)
-
-    def _get_auth_headers(self, method: str, path: str, content: str = "") -> Dict[str, str]:
-        """Generate authentication headers for API requests.
-        
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            path: API endpoint path.
-            content: Request body for POST/PUT requests.
-            
-        Returns:
-            Dictionary of headers to include in the request.
-        """
-        timestamp = utc_timestamp()
-        signature = generate_signature(
-            method=method,
-            path=path,
-            timestamp=timestamp,
-            private_key=self.private_key,
-            content=content
-        )
-        
-        return {
-            "X-Public-Key": self.public_key,
-            "X-Signature": signature,
-            "X-Timestamp": str(timestamp),
-        }
 
     @retry_with_backoff(
         max_retries=3, 
@@ -134,35 +155,52 @@ class FieldClimateClient:
         
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         method = method.upper()
+        api_path = f"/{endpoint.lstrip('/')}"
         
         # Prepare request data
         request_data = ""
         if data:
             request_data = json.dumps(data)
-            
-        # Get authentication headers
-        auth_headers = self._get_auth_headers(
-            method=method,
-            path=f"/{endpoint.lstrip('/')}",
-            content=request_data
+        
+        # Prepare headers
+        base_headers = {'Accept': 'application/json'}
+        if data:
+            base_headers['Content-Type'] = 'application/json'
+        if headers:
+            base_headers.update(headers)
+        
+        # Create authentication handler
+        auth = FieldClimateAuth(
+            api_path=api_path,
+            public_key=self.public_key,
+            private_key=self.private_key,
+            method=method
         )
         
-        # Combine with additional headers
-        all_headers = {"Content-Type": "application/json"}
-        if headers:
-            all_headers.update(headers)
-        all_headers.update(auth_headers)
-        
         try:
+            # Log request details for debugging
+            logger.debug(f"Request URL: {url}")
+            logger.debug(f"Request Method: {method}")
+            logger.debug(f"Request Headers: {base_headers}")
+            if params:
+                logger.debug(f"Request Params: {params}")
+            if data:
+                logger.debug(f"Request Data: {data}")
+            
             # Make the request
             response = self.session.request(
                 method=method,
                 url=url,
                 params=params,
                 data=request_data if data else None,
-                headers=all_headers,
+                headers=base_headers,
+                auth=auth,  # Use the auth handler
                 timeout=self.timeout
             )
+            
+            logger.debug(f"Response Status: {response.status_code}")
+            logger.debug(f"Response Headers: {response.headers}")
+            logger.debug(f"Response Body: {response.text[:200]}...")
             
             # Check for rate limiting
             if response.status_code == 429:

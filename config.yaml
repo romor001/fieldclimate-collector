@@ -7,7 +7,7 @@ api:
   # Path to private key file
   private_key_path: "secrets/private_key.txt"
   # FieldClimate API base URL
-  base_url: "https://api.fieldclimate.com/v1"
+  base_url: "https://api.fieldclimate.com/v2"
   # Request timeout in seconds
   request_timeout_seconds: 30
   # Maximum number of retries for failed requests

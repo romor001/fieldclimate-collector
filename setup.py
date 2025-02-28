@@ -18,8 +18,8 @@ setup(
         ],
     },
     python_requires=">=3.8",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="Rolf Morgenstern",
+    author_email="morgenstern.rolf@fh-swf.de",
     description="Collects weather data from Pessl's FieldClimate platform",
     keywords="weather, agriculture, data collection",
     classifiers=[
