@@ -91,8 +91,17 @@ fieldclimate-collector station 00208E6F
 # Backfill data for the last 30 days
 fieldclimate-collector station 00208E6F --days 30
 
+# Backfill data for a specific date range
+fieldclimate-collector station 00208E6F --start-date 2023-01-01 --end-date 2023-01-31
+
 # Show database statistics
 fieldclimate-collector stats
+
+# Show database statistics in JSON format
+fieldclimate-collector stats --json
+
+# Enable verbose output for any command
+fieldclimate-collector --verbose collect
 ```
 
 ### Visualization
@@ -162,7 +171,7 @@ logging:
 To set up automated data collection every hour:
 
 ```
-0 * * * * /path/to/venv/bin/fieldclimate-collector --config /path/to/config.yaml
+0 * * * * /path/to/venv/bin/fieldclimate-collector --config /path/to/config.yaml collect
 ```
 
 ### Systemd Service (Linux)
@@ -178,7 +187,7 @@ After=network.target
 Type=simple
 User=yourusername
 WorkingDirectory=/path/to/fieldclimate-collector
-ExecStart=/path/to/venv/bin/fieldclimate-collector --config /path/to/config.yaml
+ExecStart=/path/to/venv/bin/fieldclimate-collector --config /path/to/config.yaml collect
 Restart=on-failure
 RestartSec=60
 
@@ -198,7 +207,7 @@ sudo systemctl start fieldclimate-collector.service
 ### Project Structure
 
 ```
-fieldclimate-claude/
+fieldclimate-collector/
 ├── fieldclimate/
 │   ├── collector/          # API and data collection
 │   ├── database/           # Database models and manager
@@ -207,10 +216,15 @@ fieldclimate-claude/
 ├── dashboards/             # Quarto visualization
 │   ├── assets/             # Dashboard styles 
 │   ├── scripts/            # Dashboard helper scripts
+│   ├── _includes/          # Shared dashboard components
+│   ├── _brand.yml          # Dashboard branding configuration
 │   ├── overview.qmd        # Main dashboard
 │   └── station.qmd         # Station-specific dashboard
 ├── bin/                    # Command-line tools
 ├── tests/                  # Test suite
+├── debug_auth.py           # HMAC authentication debugging utility
+├── hmac_example.py         # HMAC authentication example code
+├── IMPLEMENTATION.md       # Implementation details and development notes
 ├── config.yaml.example     # Example configuration
 └── README.md               # This file
 ```
